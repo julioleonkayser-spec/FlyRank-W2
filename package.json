@@ -1,0 +1,16 @@
+{
+  "name": "todo-crud-api",
+  "version": "1.0.0",
+  "description": "A small CRUD API for managing a to-do list. Built with Node.js and Express. Data lives in memory only.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Julio Leon",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
