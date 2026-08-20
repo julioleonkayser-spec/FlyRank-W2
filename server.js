@@ -59,6 +59,49 @@ app.post("/tasks", (req, res) => {
   res.status(201).json(newTask);
 });
 
+// Stage 4: Update - replace a task's title and/or done
+app.put("/tasks/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const task = tasks.find((t) => t.id === id);
+
+  if (!task) {
+    return res.status(404).json({ error: `Task ${id} not found` });
+  }
+
+  const { title, done } = req.body ?? {};
+
+  const titleProvided = title !== undefined;
+  const doneProvided = done !== undefined;
+
+  if (!titleProvided && !doneProvided) {
+    return res.status(400).json({ error: "provide at least title or done to update" });
+  }
+  if (titleProvided && (typeof title !== "string" || title.trim() === "")) {
+    return res.status(400).json({ error: "title must be a non-empty string" });
+  }
+  if (doneProvided && typeof done !== "boolean") {
+    return res.status(400).json({ error: "done must be true or false" });
+  }
+
+  if (titleProvided) task.title = title.trim();
+  if (doneProvided) task.done = done;
+
+  res.json(task);
+});
+
+// Stage 4: Delete - remove a task
+app.delete("/tasks/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const index = tasks.findIndex((t) => t.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ error: `Task ${id} not found` });
+  }
+
+  tasks.splice(index, 1);
+  res.status(204).send();
+});
+
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
