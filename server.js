@@ -3,6 +3,9 @@ const express = require("express");
 const app = express();
 const PORT = 3000;
 
+// Lets Express read a JSON body and turn it into req.body
+app.use(express.json());
+
 // Stage 2: our "database" - just a list in memory, gone on restart
 let tasks = [
   { id: 1, title: "Buy groceries", done: false },
@@ -40,6 +43,20 @@ app.get("/tasks/:id", (req, res) => {
   }
 
   res.json(task);
+});
+
+// Stage 3: Create - add a new task
+app.post("/tasks", (req, res) => {
+  const { title } = req.body ?? {};
+
+  if (!title || typeof title !== "string" || title.trim() === "") {
+    return res.status(400).json({ error: "title is required and cannot be empty" });
+  }
+
+  const newTask = { id: nextId++, title: title.trim(), done: false };
+  tasks.push(newTask);
+
+  res.status(201).json(newTask);
 });
 
 app.listen(PORT, () => {
