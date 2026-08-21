@@ -1,0 +1,45 @@
+# Two containers, one command: `docker compose up`.
+#
+#   api -> this app, built from the Dockerfile next to this file
+#   db  -> PostgreSQL, straight from the official image
+#
+# No password is written here. Every value comes from .env, which is
+# git-ignored (copy .env.example to .env before the first run).
+
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Inside the compose network the database is reached by its service
+      # name - "db", not localhost. localhost inside a container means the
+      # container itself, which has no database in it.
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        # Wait until Postgres is actually ready to answer, not merely started.
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    # Pinned to a major version so every machine runs the same engine.
+    # 16 is the version this project was developed and tested against.
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # The named volume is what makes the data outlive the container.
+      # Without this line, `docker compose down` would erase every task.
+      - taskdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+volumes:
+  taskdata:

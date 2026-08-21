@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+
+# Never bake secrets into the image - the container gets DATABASE_URL from
+# compose.yaml instead.
+.env
+
+.git
+.gitignore
+tasks.db
+*.png
