@@ -5,7 +5,7 @@ require("dotenv").config({ quiet: true });
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
-const { pool, initDb } = require("./db");
+const { initDb, ping } = require("./db");
 const tasks = require("./taskRepository");
 
 const app = express();
@@ -27,7 +27,7 @@ app.get("/", (req, res) => {
 // says "ok" only when the API AND its database are actually reachable.
 app.get("/health", async (req, res) => {
   try {
-    await pool.query("SELECT 1");
+    await ping();
     res.json({ status: "ok", db: "ok" });
   } catch (err) {
     res.status(503).json({ status: "error", db: "unreachable" });
@@ -59,12 +59,8 @@ app.post("/tasks", async (req, res) => {
     return res.status(400).json({ error: "title is required and cannot be empty" });
   }
 
-  const { rows } = await pool.query(
-    "INSERT INTO tasks (title, done) VALUES ($1, $2) RETURNING *",
-    [title.trim(), false]
-  );
-
-  res.status(201).json(rows[0]);
+  const created = await tasks.createTask(title.trim());
+  res.status(201).json(created);
 });
 
 // Update - change a task's title and/or done flag
@@ -85,28 +81,24 @@ app.put("/tasks/:id", async (req, res) => {
     return res.status(400).json({ error: "done must be true or false" });
   }
 
-  const { rows } = await pool.query(
-    `UPDATE tasks
-        SET title = COALESCE($1, title),
-            done  = COALESCE($2, done)
-      WHERE id = $3
-      RETURNING *`,
-    [titleProvided ? title.trim() : null, doneProvided ? done : null, id]
-  );
+  const updated = await tasks.updateTask(id, {
+    title: titleProvided ? title.trim() : undefined,
+    done: doneProvided ? done : undefined,
+  });
 
-  if (!rows[0]) {
+  if (!updated) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  res.json(rows[0]);
+  res.json(updated);
 });
 
 // Delete - remove a task
 app.delete("/tasks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const result = await pool.query("DELETE FROM tasks WHERE id = $1", [id]);
+  const deleted = await tasks.deleteTask(id);
 
-  if (result.rowCount === 0) {
+  if (!deleted) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 

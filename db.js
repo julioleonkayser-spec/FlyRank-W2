@@ -68,4 +68,9 @@ async function initDb() {
   }
 }
 
-module.exports = { pool, initDb };
+// Cheapest possible "are you alive?" question for the health endpoint.
+async function ping() {
+  await pool.query("SELECT 1");
+}
+
+module.exports = { pool, initDb, ping };
