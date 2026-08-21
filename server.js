@@ -1,6 +1,7 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
+const db = require("./db");
 
 const app = express();
 const PORT = 3000;
@@ -8,13 +9,10 @@ const PORT = 3000;
 // Lets Express read a JSON body and turn it into req.body
 app.use(express.json());
 
-// Stage 2: our "database" - just a list in memory, gone on restart
-let tasks = [
-  { id: 1, title: "Buy groceries", done: false },
-  { id: 2, title: "Finish assignment", done: false },
-  { id: 3, title: "Walk the dog", done: true },
-];
-let nextId = 4;
+// SQLite stores "done" as 0/1 - convert a database row to the API's shape
+function toApiTask(row) {
+  return { id: row.id, title: row.title, done: !!row.done };
+}
 
 // Stage 1: front door - describes the API
 app.get("/", (req, res) => {
@@ -30,21 +28,22 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Stage 2: Read - list all tasks
+// Stage 1: Read - list all tasks, straight from the database
 app.get("/tasks", (req, res) => {
-  res.json(tasks);
+  const rows = db.prepare("SELECT * FROM tasks").all();
+  res.json(rows.map(toApiTask));
 });
 
-// Stage 2: Read - get a single task by id
+// Stage 1: Read - get a single task by id from the database
 app.get("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-  if (!task) {
+  if (!row) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  res.json(task);
+  res.json(toApiTask(row));
 });
 
 // Stage 3: Create - add a new task
