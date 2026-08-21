@@ -1,7 +1,7 @@
 {
   "name": "todo-crud-api",
   "version": "1.0.0",
-  "description": "A small CRUD API for managing a to-do list. Built with Node.js and Express. Data lives in memory only.",
+  "description": "A small CRUD API for managing a to-do list. Node.js + Express, backed by PostgreSQL running in Docker.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,8 +11,9 @@
   "author": "Julio Leon",
   "license": "ISC",
   "dependencies": {
-    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "pg": "^8.23.0",
     "swagger-ui-express": "^5.0.1"
   }
 }

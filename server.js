@@ -1,20 +1,19 @@
+// Loads DATABASE_URL from .env when running locally. Inside Docker the value
+// comes from compose.yaml instead, and dotenv leaves it alone.
+require("dotenv").config({ quiet: true });
+
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
-const db = require("./db");
+const { pool, initDb } = require("./db");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Lets Express read a JSON body and turn it into req.body
 app.use(express.json());
 
-// SQLite stores "done" as 0/1 - convert a database row to the API's shape
-function toApiTask(row) {
-  return { id: row.id, title: row.title, done: !!row.done };
-}
-
-// Stage 1: front door - describes the API
+// Front door - describes the API
 app.get("/", (req, res) => {
   res.json({
     name: "Task API",
@@ -23,55 +22,54 @@ app.get("/", (req, res) => {
   });
 });
 
-// Stage 1: health check - real companies use this to check a server is alive
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+// Health check - also asks the database a trivial question, so this endpoint
+// says "ok" only when the API AND its database are actually reachable.
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", db: "ok" });
+  } catch (err) {
+    res.status(503).json({ status: "error", db: "unreachable" });
+  }
 });
 
-// Stage 1: Read - list all tasks, straight from the database
-app.get("/tasks", (req, res) => {
-  const rows = db.prepare("SELECT * FROM tasks").all();
-  res.json(rows.map(toApiTask));
+// Read - list all tasks
+app.get("/tasks", async (req, res) => {
+  const { rows } = await pool.query("SELECT * FROM tasks ORDER BY id");
+  res.json(rows);
 });
 
-// Stage 1: Read - get a single task by id from the database
-app.get("/tasks/:id", (req, res) => {
+// Read - get a single task by id
+app.get("/tasks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+  const { rows } = await pool.query("SELECT * FROM tasks WHERE id = $1", [id]);
 
-  if (!row) {
+  if (!rows[0]) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  res.json(toApiTask(row));
+  res.json(rows[0]);
 });
 
-// Stage 2: Create - insert a new row into the database
-app.post("/tasks", (req, res) => {
+// Create - add a new task
+app.post("/tasks", async (req, res) => {
   const { title } = req.body ?? {};
 
   if (!title || typeof title !== "string" || title.trim() === "") {
     return res.status(400).json({ error: "title is required and cannot be empty" });
   }
 
-  const info = db
-  .prepare("INSERT INTO tasks (title, done) VALUES (?, ?)")
-  .run(title.trim(), 0);
+  const { rows } = await pool.query(
+    "INSERT INTO tasks (title, done) VALUES ($1, $2) RETURNING *",
+    [title.trim(), false]
+  );
 
-  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(info.lastInsertRowid);
-
-  res.status(201).json(toApiTask(row));
+  res.status(201).json(rows[0]);
 });
 
-// Stage 3: Update - replace a task's title and/or done with an UPDATE query
-app.put("/tasks/:id", (req, res) => {
+// Update - change a task's title and/or done flag
+app.put("/tasks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
-
-  if (!existing) {
-    return res.status(404).json({ error: `Task ${id} not found` });
-  }
-
   const { title, done } = req.body ?? {};
 
   const titleProvided = title !== undefined;
@@ -87,30 +85,52 @@ app.put("/tasks/:id", (req, res) => {
     return res.status(400).json({ error: "done must be true or false" });
   }
 
-  const newTitle = titleProvided ? title.trim() : existing.title;
-  const newDone = doneProvided ? (done ? 1 : 0) : existing.done;
+  const { rows } = await pool.query(
+    `UPDATE tasks
+        SET title = COALESCE($1, title),
+            done  = COALESCE($2, done)
+      WHERE id = $3
+      RETURNING *`,
+    [titleProvided ? title.trim() : null, doneProvided ? done : null, id]
+  );
 
-  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(newTitle, newDone, id);
+  if (!rows[0]) {
+    return res.status(404).json({ error: `Task ${id} not found` });
+  }
 
-  const updated = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
-  res.json(toApiTask(updated));
+  res.json(rows[0]);
 });
 
-// Stage 3: Delete - remove a row with a DELETE query
-app.delete("/tasks/:id", (req, res) => {
+// Delete - remove a task
+app.delete("/tasks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  const result = await pool.query("DELETE FROM tasks WHERE id = $1", [id]);
 
-  if (info.changes === 0) {
+  if (result.rowCount === 0) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
   res.status(204).send();
 });
 
-// Stage 5: Swagger UI - interactive docs at /docs
+// Swagger UI - interactive docs at /docs
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+// Anything a route throws lands here, as JSON rather than an HTML stack trace.
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
 });
+
+// Create the table and seed it before accepting any traffic.
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Could not start: database is unreachable.");
+    console.error(err.message);
+    process.exit(1);
+  });
