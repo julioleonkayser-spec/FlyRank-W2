@@ -46,7 +46,7 @@ app.get("/tasks/:id", (req, res) => {
   res.json(toApiTask(row));
 });
 
-// Stage 3: Create - add a new task
+// Stage 2: Create - insert a new row into the database
 app.post("/tasks", (req, res) => {
   const { title } = req.body ?? {};
 
@@ -54,10 +54,13 @@ app.post("/tasks", (req, res) => {
     return res.status(400).json({ error: "title is required and cannot be empty" });
   }
 
-  const newTask = { id: nextId++, title: title.trim(), done: false };
-  tasks.push(newTask);
+  const info = db
+    .prepare("INSERT INTO tasks (title, done) VALUES (?, 0)")
+    .run(title.trim());
 
-  res.status(201).json(newTask);
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(info.lastInsertRowid);
+
+  res.status(201).json(toApiTask(row));
 });
 
 // Stage 4: Update - replace a task's title and/or done
