@@ -63,12 +63,12 @@ app.post("/tasks", (req, res) => {
   res.status(201).json(toApiTask(row));
 });
 
-// Stage 4: Update - replace a task's title and/or done
+// Stage 3: Update - replace a task's title and/or done with an UPDATE query
 app.put("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
 
-  if (!task) {
+  if (!existing) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
@@ -87,22 +87,24 @@ app.put("/tasks/:id", (req, res) => {
     return res.status(400).json({ error: "done must be true or false" });
   }
 
-  if (titleProvided) task.title = title.trim();
-  if (doneProvided) task.done = done;
+  const newTitle = titleProvided ? title.trim() : existing.title;
+  const newDone = doneProvided ? (done ? 1 : 0) : existing.done;
 
-  res.json(task);
+  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(newTitle, newDone, id);
+
+  const updated = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+  res.json(toApiTask(updated));
 });
 
-// Stage 4: Delete - remove a task
+// Stage 3: Delete - remove a row with a DELETE query
 app.delete("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const index = tasks.findIndex((t) => t.id === id);
+  const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
 
-  if (index === -1) {
+  if (info.changes === 0) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  tasks.splice(index, 1);
   res.status(204).send();
 });
 
