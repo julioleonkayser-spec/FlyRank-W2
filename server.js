@@ -55,8 +55,8 @@ app.post("/tasks", (req, res) => {
   }
 
   const info = db
-    .prepare("INSERT INTO tasks (title, done) VALUES (?, 0)")
-    .run(title.trim());
+  .prepare("INSERT INTO tasks (title, done) VALUES (?, ?)")
+  .run(title.trim(), 0);
 
   const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(info.lastInsertRowid);
 
