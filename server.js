@@ -6,6 +6,7 @@ const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
 const { pool, initDb } = require("./db");
+const tasks = require("./taskRepository");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,20 +36,19 @@ app.get("/health", async (req, res) => {
 
 // Read - list all tasks
 app.get("/tasks", async (req, res) => {
-  const { rows } = await pool.query("SELECT * FROM tasks ORDER BY id");
-  res.json(rows);
+  res.json(await tasks.listTasks());
 });
 
 // Read - get a single task by id
 app.get("/tasks/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { rows } = await pool.query("SELECT * FROM tasks WHERE id = $1", [id]);
+  const task = await tasks.getTask(id);
 
-  if (!rows[0]) {
+  if (!task) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
 
-  res.json(rows[0]);
+  res.json(task);
 });
 
 // Create - add a new task
