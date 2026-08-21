@@ -3,7 +3,7 @@
   "info": {
     "title": "Task API",
     "version": "1.0.0",
-    "description": "A small CRUD API for managing a to-do list. Data is stored in memory and is lost when the server restarts."
+    "description": "A small CRUD API for managing a to-do list. Data is stored in a SQLite database and survives server restarts."
   },
   "servers": [
     { "url": "http://localhost:3000" }
