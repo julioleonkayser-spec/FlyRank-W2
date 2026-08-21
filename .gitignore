@@ -1,3 +1,9 @@
 node_modules/
 .DS_Store
+
+# Secrets - never commit the real connection string.
+# .env.example is committed instead, with placeholder values.
+.env
+
+# Assignment 2 leftover: the SQLite database file
 tasks.db
